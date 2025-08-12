@@ -33,6 +33,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.commons.vfs2.FileContent;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.FileType;
@@ -207,6 +208,11 @@ public abstract class S3CommonFileObject extends AbstractFileObject {
     } finally {
       closeS3Object();
     }
+  }
+
+  @Override
+  protected FileContent doCreateFileContent() throws FileSystemException {
+    return new S3CommonFileContent(this, this.getFileContentInfoFactory());
   }
 
   protected void handleAttachException(String key, String bucket) throws IOException {
