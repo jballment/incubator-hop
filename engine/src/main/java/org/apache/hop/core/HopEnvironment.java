@@ -146,8 +146,12 @@ public class HopEnvironment {
         //
         for (DescribedVariable describedVariable : hopConfig.getDescribedVariables()) {
           if (StringUtils.isNotEmpty(describedVariable.getName())) {
-            System.setProperty(
-                describedVariable.getName(), Const.NVL(describedVariable.getValue(), ""));
+            if (StringUtils.isEmpty(System.getProperty(describedVariable.getName()))) {
+              System.setProperty(
+                    describedVariable.getName(), Const.NVL(describedVariable.getValue(), ""));
+              } else {
+                describedVariable.setValue(System.getProperty(describedVariable.getName()));
+              }
           }
         }
 
