@@ -42,7 +42,10 @@ import org.apache.commons.vfs2.impl.FileContentInfoFilenameFactory;
 import org.apache.commons.vfs2.impl.StandardFileSystemManager;
 import org.apache.commons.vfs2.provider.FileProvider;
 import org.apache.commons.vfs2.provider.local.LocalFile;
+import org.apache.commons.vfs2.util.Cryptor;
+import org.apache.commons.vfs2.util.CryptorFactory;
 import org.apache.hop.core.Const;
+import org.apache.hop.core.encryption.Encr;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.exception.HopFileException;
 import org.apache.hop.core.plugins.IPlugin;
@@ -213,6 +216,8 @@ public class HopVfs {
         boolean relativeFilename = true;
         String[] initialSchemes = fsManager.getSchemes();
 
+        vfsFilename = hop2vfsPasswordEncoder(vfsFilename, variables);
+
         relativeFilename = checkForScheme(initialSchemes, relativeFilename, vfsFilename);
 
         String filename;
@@ -260,6 +265,8 @@ public class HopVfs {
         //
         boolean relativeFilename = true;
         String[] initialSchemes = fsManager.getSchemes();
+
+        vfsFilename = hop2vfsPasswordEncoder(vfsFilename, null);
 
         relativeFilename = checkForScheme(initialSchemes, relativeFilename, vfsFilename);
 
@@ -309,6 +316,118 @@ public class HopVfs {
    */
   private static String cleanseFilename(String vfsFilename) {
     return vfsFilename.replaceAll(":[^:@/]+@", ":<password>@");
+  }
+
+  /**
+   * Converts Hop-encrypted passwords in VFS URIs to Commons VFS encrypted format.
+   *
+   * <p>Extracts the password component from a VFS URI (format: scheme://user:password@host...),
+   * decrypts it using Hop's {@link Encr#decryptPasswordOptionallyEncrypted(String)}, and wraps it
+   * in braces for Commons VFS compatibility.
+   *
+   * <p>Returns the original input unchanged if:
+   *
+   * <ul>
+   *   <li>Input is null or blank
+   *   <li>Input is not a valid URI (no scheme)
+   *   <li>URI has no password segment (e.g., sftp://user@host/path)
+   *   <li>Password does not change after decryption (not Hop-encrypted)
+   *   <li>URI format is invalid (e.g., sftp://user:pass/path without @)
+   * </ul>
+   *
+   * @param vfsFilename the VFS URI to process (e.g., sftp://user:Encrypted abc123@host/path)
+   * @param variables the IVariables context for resolving variable references in the password
+   * @return the URI with encrypted password wrapped in braces if changed, or the original input if
+   *     no changes were needed
+   */
+  static String hop2vfsPasswordEncoder(String vfsFilename, IVariables variables) {
+    // Early return for null or blank input
+    if (StringUtils.isBlank(vfsFilename)) {
+      return vfsFilename;
+    }
+
+    // Find scheme boundary (://) or (\\)
+    int schemeEnd = vfsFilename.indexOf("://");
+    if (schemeEnd == -1) {
+      schemeEnd = vfsFilename.indexOf("\\\\");
+      if (schemeEnd == -1) {
+        // No valid scheme found, return unchanged
+        return vfsFilename;
+      }
+      schemeEnd += 2; // Move past ":\\"
+    } else {
+      schemeEnd += 3; // Move past "://"
+    }
+
+    // Find first ':' (username:password delimiter) after scheme
+    int colonPos = vfsFilename.indexOf(':', schemeEnd);
+    if (colonPos == -1) {
+      // No password delimiter found, return unchanged (e.g., sftp://user/path)
+      return vfsFilename;
+    }
+
+    // Find '@' that separates credentials from host (must be before first '/' or '\')
+    int atPos = vfsFilename.indexOf('@', colonPos);
+    if (atPos == -1) {
+      // No '@' found after ':', invalid URI format, return unchanged
+      return vfsFilename;
+    }
+
+    // Verify '@' comes before the next '/' or '\' (path separator)
+    int nextSlash = vfsFilename.indexOf('/', atPos);
+    int nextBackslash = vfsFilename.indexOf('\\', atPos);
+    if (nextSlash == -1) {
+      nextSlash = Integer.MAX_VALUE;
+    }
+    if (nextBackslash == -1) {
+      nextBackslash = Integer.MAX_VALUE;
+    }
+
+    // If '@' is not before first path separator, it's part of path, not credentials
+    if (atPos > Math.min(nextSlash, nextBackslash)) {
+      return vfsFilename;
+    }
+
+    // Extract password from colonPos+1 to atPos
+    String password = vfsFilename.substring(colonPos + 1, atPos);
+
+    // Resolve variables in the password
+    String resolvedPassword = variables != null ? variables.resolve(password) : password;
+
+    // Try to decrypt the password using Hop's decryption (optionally encrypted)
+    // If the encoder is not available, treat the password as plain text
+    String decryptedPassword;
+    try {
+      decryptedPassword = Encr.decryptPasswordOptionallyEncrypted(resolvedPassword);
+    } catch (Exception e) {
+      // Encoder not available or decryption failed, return original
+      return vfsFilename;
+    }
+
+    // If decrypted password equals the resolved password, it was not Hop-encrypted
+    // Return the original input unchanged
+    if (decryptedPassword.equals(resolvedPassword)) {
+      return vfsFilename;
+    }
+
+    // Wrap the decrypted password in braces for Commons VFS compatibility
+    Cryptor cryptor = CryptorFactory.getCryptor();
+    String vfsEncryptedPassword = null;
+    try {
+      vfsEncryptedPassword = cryptor.encrypt(decryptedPassword);
+    } catch (Exception e) {
+      return vfsFilename;
+    }
+
+    // Replace the original password with the braced one
+    String result =
+        vfsFilename.substring(0, colonPos + 1)
+            + "{"
+            + vfsEncryptedPassword
+            + "}"
+            + vfsFilename.substring(atPos);
+
+    return result;
   }
 
   /**

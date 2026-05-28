@@ -17,15 +17,31 @@
 
 package org.apache.hop.core.vfs;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.OutputStream;
 import org.apache.commons.vfs2.FileObject;
+import org.apache.hop.core.HopClientEnvironment;
+import org.apache.hop.core.encryption.Encr;
+import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.variables.Variables;
+import org.apache.hop.junit.rules.RestoreHopEnvironment;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 
 public class HopVfsTest {
+
+  @ClassRule public static RestoreHopEnvironment env = new RestoreHopEnvironment();
+
+  @BeforeClass
+  public static void setUpBeforeClass() throws HopException {
+    HopClientEnvironment.init();
+    Encr.init("Hop");
+  }
 
   /**
    * Test to validate that startsWitScheme() returns true if the fileName starts with known protocol
@@ -67,5 +83,97 @@ public class HopVfsTest {
     try (OutputStream outputStream = fileObject.getContent().getOutputStream()) {
       outputStream.write("Test-content".getBytes());
     }
+  }
+
+  /** Test hop2vfsPasswordEncoder with null input */
+  @Test
+  public void testHop2VfsPasswordEncoder_Null() {
+    String result = HopVfs.hop2vfsPasswordEncoder(null, new Variables());
+    assertEquals(null, result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with blank input */
+  @Test
+  public void testHop2VfsPasswordEncoder_Blank() {
+    String result = HopVfs.hop2vfsPasswordEncoder("", new Variables());
+    assertEquals("", result);
+
+    result = HopVfs.hop2vfsPasswordEncoder("   ", new Variables());
+    assertEquals("   ", result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with non-URI input */
+  @Test
+  public void testHop2VfsPasswordEncoder_NotUri() {
+    String input = "some random text";
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+    assertEquals(input, result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with URI without password */
+  @Test
+  public void testHop2VfsPasswordEncoder_NoPassword() {
+    String input = "sftp://myuser@myserver/myfolder/myfile.txt";
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+    assertEquals(input, result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with URI without @ (invalid) */
+  @Test
+  public void testHop2VfsPasswordEncoder_InvalidUri() {
+    String input = "sftp://myuser:mypass/myfolder/myfile.txt";
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+    assertEquals(input, result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with plain password (not Hop-encrypted) */
+  @Test
+  public void testHop2VfsPasswordEncoder_PlainPassword() {
+    String input = "sftp://myuser:mypass@myserver/myfolder/myfile.txt";
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+    assertEquals(input, result);
+  }
+
+  /** Test hop2vfsPasswordEncoder with null variables */
+  @Test
+  public void testHop2VfsPasswordEncoder_NullVariables() {
+    String encryptedPassword = Encr.encryptPasswordIfNotUsingVariables("mypass");
+    String input = "sftp://myuser:" + encryptedPassword + "@myserver/myfolder/myfile.txt";
+    String result = HopVfs.hop2vfsPasswordEncoder(input, null);
+    assertNotEquals(input, result);
+    assertTrue(result.contains("{"));
+    assertTrue(result.contains("}"));
+  }
+
+  /**
+   * Test hop2vfsPasswordEncoder with Hop-encrypted password prefix. When encoder is available, the
+   * URI should be modified and password wrapped in braces. When encoder is not initialized, the URI
+   * should be returned unchanged (graceful degradation).
+   */
+  @Test
+  public void testHop2VfsPasswordEncoder_EncryptedPrefixHandling() {
+    // Use a pre-computed Hop-encrypted password (same one from user's example)
+    // This represents an encrypted password that starts with "Encrypted " prefix
+    String encryptedPassword = Encr.encryptPasswordIfNotUsingVariables("mypass");
+    String input = "sftp://myuser:" + encryptedPassword + "@myserver/myfolder/myfile.txt";
+
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+
+    assertNotEquals(input, result);
+    assertTrue(result.contains("{"));
+    assertTrue(result.contains("}"));
+  }
+
+  /** Test hop2vfsPasswordEncoder with backslash separator */
+  @Test
+  public void testHop2VfsPasswordEncoder_BackslashSeparator() {
+    String encryptedPassword = Encr.encryptPasswordIfNotUsingVariables("mypass");
+    String input = "\\\\myuser:" + encryptedPassword + "@myserver\\myfolder\\myfile.txt";
+
+    String result = HopVfs.hop2vfsPasswordEncoder(input, new Variables());
+
+    assertNotEquals(input, result);
+    assertTrue(result.contains("{"));
+    assertTrue(result.contains("}"));
   }
 }
