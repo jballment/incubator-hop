@@ -151,8 +151,28 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
     }
     IAiProvider provider = getMetadata().getProvider();
     Set<String> hidden = new HashSet<>();
-    if (provider != null && !provider.requiresApiKey()) {
-      hidden.add(AiProvider.WIDGET_API_KEY);
+    if (provider != null) {
+      if (!provider.requiresApiKey()) {
+        hidden.add(AiProvider.WIDGET_API_KEY);
+      }
+      if (!provider.supportsBaseUrl()) {
+        hidden.add(AiProvider.WIDGET_BASE_URL);
+      }
+      if (!provider.supportsTemperature()) {
+        hidden.add(AiProvider.WIDGET_TEMPERATURE);
+      }
+      if (!provider.supportsContextSize()) {
+        hidden.add(AiProvider.WIDGET_CONTEXT_SIZE);
+      }
+      if (!provider.supportsMaxOutputTokens()) {
+        hidden.add(AiProvider.WIDGET_MAX_OUTPUT_TOKENS);
+      }
+      if (!provider.supportsThinking()) {
+        hidden.add(AiProvider.WIDGET_THINKING);
+      }
+      if (!provider.supportsStructuredAnswers()) {
+        hidden.add(AiProvider.WIDGET_STRUCTURED_ANSWERS);
+      }
     }
     widgets.setWidgetsHidden(getMetadata(), hidden);
     parent.layout(true, true);
