@@ -19,9 +19,11 @@ package org.apache.hop.ai.copilot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.copilot.rpc.CopilotClientMode;
+import com.github.copilot.rpc.PermissionHandler;
 import java.time.Duration;
 import java.util.List;
 import org.apache.hop.ai.provider.AiChatMessage;
@@ -59,6 +61,7 @@ class GitHubCopilotProviderTest {
     assertTrue(config.getSkipCustomInstructions().orElse(false));
     assertFalse(config.getEnableOnDemandInstructionDiscovery().orElse(true));
     assertFalse(config.isEnableMcpApps());
+    assertSame(PermissionHandler.APPROVE_ALL, config.getOnPermissionRequest());
   }
 
   @Test

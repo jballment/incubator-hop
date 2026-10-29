@@ -23,6 +23,7 @@ import com.github.copilot.rpc.CopilotClientMode;
 import com.github.copilot.rpc.CopilotClientOptions;
 import com.github.copilot.rpc.MessageOptions;
 import com.github.copilot.rpc.ModelInfo;
+import com.github.copilot.rpc.PermissionHandler;
 import com.github.copilot.rpc.SessionConfig;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -213,7 +214,8 @@ public class GitHubCopilotProvider extends BaseAiProvider implements IAiChatProv
             .setEnableConfigDiscovery(false)
             .setSkipCustomInstructions(true)
             .setEnableOnDemandInstructionDiscovery(false)
-            .setEnableMcpApps(false);
+            .setEnableMcpApps(false)
+            .setOnPermissionRequest(PermissionHandler.APPROVE_ALL);
     if (!Utils.isEmpty(modelName)) {
       config.setModel(modelName);
     }
