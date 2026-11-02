@@ -19,6 +19,7 @@ package org.apache.hop.pipeline.transforms.languagemodelchat;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import org.apache.hop.ai.provider.AiChatProviderSession;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
@@ -32,6 +33,7 @@ public final class LanguageModelChatAiProviderSupport {
   public static final String METADATA_KEY = "ai-provider";
   private static final String FACTORY_CLASS = "org.apache.hop.ai.engine.AiChatFactory";
   private static final String OVERLAY_METHOD = "overlayNamedProvider";
+  private static final String NATIVE_METHOD = "resolveNativeChatProvider";
 
   private LanguageModelChatAiProviderSupport() {}
 
@@ -65,6 +67,33 @@ public final class LanguageModelChatAiProviderSupport {
           "Unable to apply AI Provider '" + meta.getAiProviderName() + "'", cause);
     } catch (Exception e) {
       throw new HopException("Unable to apply AI Provider '" + meta.getAiProviderName() + "'", e);
+    }
+  }
+
+  public static AiChatProviderSession resolveNative(
+      String providerName, IVariables variables, IHopMetadataProvider metadataProvider)
+      throws HopException {
+    if (isBlank(providerName)) {
+      return null;
+    }
+    try {
+      Class<?> factory = Class.forName(FACTORY_CLASS);
+      Method resolve =
+          factory.getMethod(
+              NATIVE_METHOD, String.class, IVariables.class, IHopMetadataProvider.class);
+      return (AiChatProviderSession)
+          resolve.invoke(null, providerName, variables, metadataProvider);
+    } catch (ClassNotFoundException e) {
+      throw new HopException(
+          "Named AI Provider '" + providerName + "' requires the hop-tech-ai plugin.", e);
+    } catch (InvocationTargetException e) {
+      Throwable cause = e.getCause() != null ? e.getCause() : e;
+      if (cause instanceof HopException hopException) {
+        throw hopException;
+      }
+      throw new HopException("Unable to resolve AI Provider '" + providerName + "'", cause);
+    } catch (Exception e) {
+      throw new HopException("Unable to resolve AI Provider '" + providerName + "'", e);
     }
   }
 

@@ -23,7 +23,7 @@ under the License.
 
 == Description
 
-The Language model chat transform, using LangChain4j, enables seamless interaction with a variety of language models endpoints, including OpenAI, Anthropic, Hugging Face, Mistral, and Ollama. This transform provides a unified interface, allowing to integrate and configure different models effortlessly within the same pipeline.
+The Language model chat transform supports LangChain4j model endpoints such as OpenAI, Anthropic, Hugging Face, Mistral, and Ollama, as well as native chat providers registered with Hop's AI Provider framework. This transform provides a unified interface for integrating different models within the same pipeline.
 
 Additionally, the transform supports the application of some prompt engineering techniques to refine model interactions and achieve more contextually relevant responses. See ``Basic Prompt Engineering Techniques`` below for some examples.
 
@@ -41,7 +41,7 @@ The following parameters are applicable to all language model selections.
 | Name of the transform. Must be unique within a single pipeline.
 
 | AI Provider (optional)
-| Named xref:metadata-types/ai-provider.adoc[AI Provider] metadata from the Metadata perspective. When set, the provider's connection settings (provider type, base URL, API key, chat model, timeout, temperature) take precedence over the inline values below, which are only used for fields the provider leaves empty. See <<ai-provider-precedence>>. Input/output mapping, mock mode, proxy and retries stay on this transform. Leave blank to use only the inline fields. Requires the `hop-tech-ai` plugin. Do not paste live API keys on this transform or on the provider: use an environment variable or a xref:metadata-types/variable-resolver/index.adoc[variable resolver].
+| Named xref:metadata-types/ai-provider.adoc[AI Provider] metadata from the Metadata perspective. LangChain4j provider types overlay connection fields onto the inline configuration as described in <<ai-provider-precedence>>. Native providers (for example GitHub Copilot) use their own connection settings and model; supported common options are passed through, while unsupported configured options fail with an actionable error. Requires the `hop-tech-ai` plugin. Do not paste live API keys on this transform or on the provider: use an environment variable or a xref:metadata-types/variable-resolver/index.adoc[variable resolver].
 
 | Input JSON Chat
 | When enabled, uses the chat completion JSON format (system, assistant, user messages). When disabled, treats the input as plain text. See "Chat Completion" section for more details.
@@ -74,7 +74,7 @@ The following parameters are applicable to all language model selections.
 [[ai-provider-precedence]]
 === AI Provider and inline settings
 
-When *AI Provider* is set, the transform starts from its own settings and then copies the provider's connection settings over them. The provider wins wherever it has a value; an inline value is only a fallback for a field the provider leaves empty.
+For LangChain4j provider types, when *AI Provider* is set the transform starts from its own settings and then copies the provider's connection settings over them. The provider wins wherever it has a value; an inline value is only a fallback for a field the provider leaves empty.
 
 [cols="2,4",options="header"]
 |===
@@ -112,9 +112,11 @@ Variables in provider fields are resolved first, so apart from *Temperature*, a 
 
 The inline fallbacks come from the provider's model type, not from the *Model API* selected on the transform. With an Anthropic provider, for example, an empty provider *Model name* falls back to the inline Anthropic model name, even when the transform itself was set up for OpenAI.
 
-All other options always come from the transform: mock mode, parallelism and the input and output fields, and the model-specific options such as Top P, Top K, response format, proxy, retries and logging. The model-specific ones are read from the transform's fields for the provider's model type.
+For LangChain4j provider types, all other options come from the transform: mock mode, parallelism and the input and output fields, and model-specific options such as Top P, Top K, response format, proxy, retries and logging. The model-specific ones are read from the transform's fields for the provider's model type.
 
 To tune the temperature per transform while sharing one provider, leave *Temperature* empty on the provider and set it on each transform.
+
+Native providers execute through Hop's provider-neutral chat API rather than a LangChain4j `ChatModel`. Their named AI Provider supplies the connection, model and timeout; inline connection fields are not used. Common generation options are sent only when the provider declares support. Non-default unsupported options are rejected instead of silently ignored. Native providers may return no token counts or finish reason, and providers that accept text only reject image or tool messages explicitly. GitHub Copilot currently supports text prompts, system instructions, conversation history, model selection, timeouts and JSON-only prompting; it does not support image/tool input, token usage reporting, structured answers, sampling controls, proxy settings or transform-level connection overrides.
 
 === Model-Specific Options
 

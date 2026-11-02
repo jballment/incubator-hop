@@ -27,6 +27,8 @@ import org.apache.hop.ai.provider.IAiProvider;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.exception.HopRuntimeException;
+import org.apache.hop.core.gui.plugin.GuiElements;
+import org.apache.hop.core.gui.plugin.GuiRegistry;
 import org.apache.hop.core.util.Utils;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.ui.core.PropsUi;
@@ -43,6 +45,7 @@ import org.apache.hop.ui.hopgui.HopGui;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
+import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
@@ -58,6 +61,8 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
   private TextVar wName;
   private Combo wProviderType;
   private GuiCompositeWidgets widgets;
+  private GuiCompositeWidgets providerWidgets;
+  private Composite providerOptionsComposite;
   private final AtomicBoolean busyChangingType = new AtomicBoolean(false);
 
   public AiProviderEditor(HopGui hopGui, MetadataManager<AiProvider> manager, AiProvider metadata) {
@@ -102,7 +107,13 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
             wProviderType,
             null,
             AiProvider.GUI_WIDGETS_PARENT_ID,
-            getMetadata());
+            getMetadata(),
+            compositeWidgets ->
+                compositeWidgets.registerExtraGroup(
+                    BaseMessages.getString(PKG, "AiProviderEditor.Group.Connection"),
+                    "10",
+                    null,
+                    this::createProviderOptions));
 
     setWidgetsContent();
 
@@ -126,12 +137,14 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
     try {
       AiProvider meta = getMetadata();
       widgets.getWidgetsContents(meta, AiProvider.GUI_WIDGETS_PARENT_ID);
+      readProviderOptions(meta);
       String selected = wProviderType.getText();
       if (selected != null && !selected.isEmpty()) {
         meta.setProviderType(selected);
       }
       applyModelNameChoices(meta.getModelNameChoices(null, null));
       widgets.setWidgetsContents(meta, null, AiProvider.GUI_WIDGETS_PARENT_ID);
+      refreshProviderOptions(meta);
       updateVisibility();
       setChanged();
     } catch (HopException e) {
@@ -142,6 +155,67 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
           e);
     } finally {
       busyChangingType.set(false);
+    }
+  }
+
+  private void createProviderOptions(Composite composite) {
+    Control[] controls = composite.getChildren();
+    Control lastControl = controls[controls.length - 1];
+    providerOptionsComposite = new Composite(composite, SWT.NONE);
+    PropsUi.setLook(providerOptionsComposite);
+    FormLayout layout = new FormLayout();
+    layout.marginWidth = PropsUi.getFormMargin();
+    layout.marginHeight = PropsUi.getFormMargin();
+    providerOptionsComposite.setLayout(layout);
+    FormData formData = new FormData();
+    formData.left = new FormAttachment(0, 0);
+    formData.right = new FormAttachment(100, 0);
+    formData.top = new FormAttachment(lastControl, PropsUi.getMargin());
+    providerOptionsComposite.setLayoutData(formData);
+  }
+
+  private void refreshProviderOptions(AiProvider meta) {
+    if (providerOptionsComposite == null || providerOptionsComposite.isDisposed()) {
+      return;
+    }
+    for (Control child : providerOptionsComposite.getChildren()) {
+      child.dispose();
+    }
+    providerWidgets = null;
+    IAiProvider provider = meta.getProvider();
+    if (provider != null) {
+      GuiElements elements =
+          GuiRegistry.getInstance()
+              .findGuiElements(
+                  provider.getClass().getName(), IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID);
+      if (elements != null && !elements.getChildren().isEmpty()) {
+        providerWidgets = new GuiCompositeWidgets(manager.getVariables());
+        providerWidgets.createCompositeWidgets(
+            provider,
+            null,
+            providerOptionsComposite,
+            IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID,
+            null);
+        providerWidgets.setWidgetsContents(
+            provider, providerOptionsComposite, IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID);
+        providerWidgets.setWidgetsListener(
+            new GuiCompositeWidgetsAdapter() {
+              @Override
+              public void widgetModified(
+                  GuiCompositeWidgets compositeWidgets, Control changedWidget, String widgetId) {
+                setChanged();
+              }
+            });
+      }
+    }
+    providerOptionsComposite.getParent().layout(true, true);
+    GuiCompositeWidgets.updateScrolledMinSize(providerOptionsComposite.getParent());
+  }
+
+  private void readProviderOptions(AiProvider meta) {
+    if (providerWidgets != null && meta.getProvider() != null) {
+      providerWidgets.getWidgetsContents(
+          meta.getProvider(), IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID);
     }
   }
 
@@ -193,6 +267,7 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
       wProviderType.setText(meta.getPluginName());
     }
     widgets.setWidgetsContents(meta, null, AiProvider.GUI_WIDGETS_PARENT_ID);
+    refreshProviderOptions(meta);
     updateVisibility();
   }
 
@@ -214,6 +289,7 @@ public class AiProviderEditor extends MetadataEditor<AiProvider> {
         throw new HopRuntimeException(e);
       }
     }
+    readProviderOptions(meta);
   }
 
   @Override

@@ -27,10 +27,22 @@ public record AiChatRequest(
     String userPrompt,
     List<AiChatMessage> conversationHistory,
     Duration timeout,
-    boolean jsonOnly) {
+    boolean jsonOnly,
+    AiChatOptions options) {
 
   public AiChatRequest {
     conversationHistory =
         conversationHistory == null ? List.of() : List.copyOf(conversationHistory);
+    options = options == null ? AiChatOptions.defaults() : options;
+  }
+
+  public AiChatRequest(
+      String modelName,
+      String systemPrompt,
+      String userPrompt,
+      List<AiChatMessage> conversationHistory,
+      Duration timeout,
+      boolean jsonOnly) {
+    this(modelName, systemPrompt, userPrompt, conversationHistory, timeout, jsonOnly, null);
   }
 }

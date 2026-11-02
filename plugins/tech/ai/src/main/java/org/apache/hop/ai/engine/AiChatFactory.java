@@ -33,7 +33,10 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.apache.hop.ai.metadata.AiModelRole;
 import org.apache.hop.ai.metadata.AiProvider;
+import org.apache.hop.ai.provider.AiChatCapability;
 import org.apache.hop.ai.provider.AiChatMessage;
+import org.apache.hop.ai.provider.AiChatOptions;
+import org.apache.hop.ai.provider.AiChatProviderSession;
 import org.apache.hop.ai.provider.AiChatRequest;
 import org.apache.hop.ai.provider.AiChatResponse;
 import org.apache.hop.ai.provider.IAiChatProvider;
@@ -111,6 +114,133 @@ public final class AiChatFactory {
     LanguageModelChatMeta copy = (LanguageModelChatMeta) source.clone();
     applyConnection(copy, provider, variables, false);
     return copy;
+  }
+
+  /**
+   * Resolve a named provider that executes through the provider-neutral native chat API.
+   *
+   * @return the configured session, or null when the provider uses LangChain4j
+   */
+  public static AiChatProviderSession resolveNativeChatProvider(
+      String providerName, IVariables variables, IHopMetadataProvider metadataProvider)
+      throws HopException {
+    if (providerName == null || providerName.isBlank()) {
+      return null;
+    }
+    if (metadataProvider == null) {
+      throw new HopException(
+          BaseMessages.getString(PKG, "AiChatFactory.NoMetadataProvider", providerName));
+    }
+    String name = resolve(variables, providerName);
+    AiProvider provider = metadataProvider.getSerializer(AiProvider.class).load(name);
+    if (provider == null) {
+      throw new AiUserException(
+          BaseMessages.getString(PKG, "AiChatFactory.ProviderNotFound", name));
+    }
+    return nativeChatProviderSession(provider, variables);
+  }
+
+  static AiChatProviderSession nativeChatProviderSession(AiProvider provider, IVariables variables)
+      throws HopException {
+    if (!(provider.getProvider() instanceof IAiChatProvider chatProvider)) {
+      return null;
+    }
+
+    validateNativeProviderSettings(provider, chatProvider, variables);
+    AiProviderSettings settings = AiProviderSettings.of(provider, variables);
+    String modelName = resolve(variables, provider.resolveModelName(AiModelRole.CHAT));
+    if (Utils.isEmpty(modelName)) {
+      modelName = resolve(variables, chatProviderModelDefault(provider));
+    }
+    AiChatOptions options =
+        new AiChatOptions(
+            supports(chatProvider, AiChatCapability.TEMPERATURE)
+                    && provider.getProvider().supportsTemperature()
+                ? settings.temperature()
+                : null,
+            null,
+            null,
+            supports(chatProvider, AiChatCapability.CONTEXT_SIZE)
+                    && provider.getProvider().supportsContextSize()
+                ? settings.contextSize()
+                : null,
+            supports(chatProvider, AiChatCapability.MAX_OUTPUT_TOKENS)
+                    && provider.getProvider().supportsMaxOutputTokens()
+                ? settings.maxOutputTokens()
+                : null,
+            supports(chatProvider, AiChatCapability.THINKING)
+                    && provider.getProvider().supportsThinking()
+                ? settings.think()
+                : null,
+            null,
+            null,
+            null,
+            null,
+            supports(chatProvider, AiChatCapability.STRUCTURED_OUTPUT)
+                && provider.getProvider().supportsStructuredAnswers()
+                && provider.isStructuredAnswers());
+    return new AiChatProviderSession(
+        chatProvider,
+        provider.getName(),
+        chatProviderModelType(provider),
+        modelName,
+        settings.timeout(),
+        options);
+  }
+
+  private static boolean supports(IAiChatProvider provider, AiChatCapability capability) {
+    return provider.capabilities().contains(capability);
+  }
+
+  private static String chatProviderModelDefault(AiProvider provider) {
+    return provider.getProvider().getDefaultModelName();
+  }
+
+  private static String chatProviderModelType(AiProvider provider) {
+    return provider.getProvider().getHopModelType();
+  }
+
+  private static void validateNativeProviderSettings(
+      AiProvider provider, IAiChatProvider chatProvider, IVariables variables) throws HopException {
+    List<String> unsupported = new ArrayList<>();
+    var backend = provider.getProvider();
+    if (!Utils.isEmpty(resolve(variables, provider.getBaseUrl()))) {
+      unsupported.add("base URL");
+    }
+    if (!Utils.isEmpty(resolve(variables, provider.getApiKey()))) {
+      unsupported.add("API key");
+    }
+    String temperature = resolve(variables, provider.getTemperature());
+    if ((!backend.supportsTemperature() || !supports(chatProvider, AiChatCapability.TEMPERATURE))
+        && !Utils.isEmpty(temperature)
+        && !"0.3".equals(temperature.trim())) {
+      unsupported.add("temperature");
+    }
+    if ((!backend.supportsContextSize() || !supports(chatProvider, AiChatCapability.CONTEXT_SIZE))
+        && !Utils.isEmpty(resolve(variables, provider.getContextSize()))) {
+      unsupported.add("context size");
+    }
+    if ((!backend.supportsMaxOutputTokens()
+            || !supports(chatProvider, AiChatCapability.MAX_OUTPUT_TOKENS))
+        && !Utils.isEmpty(resolve(variables, provider.getMaxOutputTokens()))) {
+      unsupported.add("max output tokens");
+    }
+    if ((!backend.supportsThinking() || !supports(chatProvider, AiChatCapability.THINKING))
+        && !Utils.isEmpty(resolve(variables, provider.getThinking()))) {
+      unsupported.add("thinking");
+    }
+    if ((!backend.supportsStructuredAnswers()
+            || !supports(chatProvider, AiChatCapability.STRUCTURED_OUTPUT))
+        && provider.isStructuredAnswers()) {
+      unsupported.add("structured answers");
+    }
+    if (!unsupported.isEmpty()) {
+      throw new HopException(
+          "AI provider "
+              + provider.getPluginName()
+              + " does not support configured connection options: "
+              + String.join(", ", unsupported));
+    }
   }
 
   /**

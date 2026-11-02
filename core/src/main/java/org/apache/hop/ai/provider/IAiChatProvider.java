@@ -18,7 +18,9 @@
 package org.apache.hop.ai.provider;
 
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.variables.IVariables;
 
@@ -29,6 +31,20 @@ import org.apache.hop.core.variables.IVariables;
  * interface.
  */
 public interface IAiChatProvider {
+
+  /**
+   * Declares which optional request settings this provider can honor. Providers should override
+   * this rather than silently ignoring settings supplied by transforms.
+   */
+  default Set<AiChatCapability> capabilities() {
+    return Set.copyOf(
+        EnumSet.of(
+            AiChatCapability.MODEL_SELECTION,
+            AiChatCapability.REQUEST_TIMEOUT,
+            AiChatCapability.SYSTEM_PROMPT,
+            AiChatCapability.CONVERSATION_HISTORY,
+            AiChatCapability.JSON_ONLY_PROMPT));
+  }
 
   /** Executes a chat request using the provider's native SDK or protocol. */
   AiChatResponse chat(AiChatRequest request, IVariables variables) throws HopException;

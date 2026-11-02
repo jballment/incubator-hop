@@ -19,9 +19,18 @@ package org.apache.hop.ai.provider;
 
 /** Provider-neutral result of a chat request. */
 public record AiChatResponse(
-    String text, Integer inputTokenCount, Integer outputTokenCount, long durationMs) {
+    String text,
+    Integer inputTokenCount,
+    Integer outputTokenCount,
+    long durationMs,
+    String finishReason) {
 
   public AiChatResponse {
     text = text == null ? "" : text;
+  }
+
+  public AiChatResponse(
+      String text, Integer inputTokenCount, Integer outputTokenCount, long durationMs) {
+    this(text, inputTokenCount, outputTokenCount, durationMs, null);
   }
 }

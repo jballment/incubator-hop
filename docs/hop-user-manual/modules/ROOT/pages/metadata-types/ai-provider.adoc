@@ -40,10 +40,10 @@ The same pattern applies to every other secret in the project: never hard-code i
 See xref:hop-gui/perspective-ai-advisor.adoc#secrets-and-personal-information[Secrets and personal information].
 
 The xref:pipeline/transforms/languagemodelchat.adoc[Language model chat] transform can optionally select a named AI Provider.
-The provider's type, base URL, API key, chat model, timeout, temperature, max output tokens and thinking then take precedence over the transform's inline values; an inline value is only used when the provider leaves that field empty.
+For LangChain4j provider types, the provider's type, base URL, API key, chat model, timeout, temperature, max output tokens and thinking take precedence over the transform's inline values; an inline value is only used when the provider leaves that field empty.
 With an Ollama provider, the context size always comes from the provider (16384 when it is empty), and an Anthropic provider without *Max output tokens* sends 4096 rather than the transform's value.
 In particular, a temperature set on the provider overrides the temperature on every transform that uses it, so leave *Temperature* empty here if transforms need their own.
-Input/output mapping, mock mode, proxy and retries stay on the transform.
+Native providers execute through their provider-neutral API and use their own connection settings; common options are passed only when supported, and unsupported settings are reported. Input/output mapping and mock mode remain on the transform.
 See xref:pipeline/transforms/languagemodelchat.adoc#ai-provider-precedence[AI Provider and inline settings] for the details.
 
 == Provider types
@@ -98,13 +98,18 @@ See xref:pipeline/transforms/languagemodelchat.adoc#ai-provider-precedence[AI Pr
 |===
 
 GitHub Copilot uses the official Java SDK to start the installed Copilot CLI. Install and sign in to
-the CLI as the same operating-system user that runs Hop. Put `copilot` on `PATH`, set
-`COPILOT_CLI_PATH`, or enter the executable path in the provider's *Copilot CLI path* field.
+the CLI as the same operating-system user that runs Hop. On the *Connection* tab, browse to or enter
+the executable path in *Copilot CLI path*, or leave it empty to use the `COPILOT_CLI_PATH`
+environment variable.
 Authentication remains with the CLI; Hop metadata stores no GitHub token. The assistant session
 uses an empty tool allowlist, so it cannot invoke Copilot CLI tools such as shell or file access.
 
-The GitHub Copilot provider works with the Hop AI Assistant. It is not a LangChain4j model and
-cannot be used by Language Model Chat or transforms that construct a LangChain4j model.
+The GitHub Copilot provider works with the Hop AI Assistant and Language Model Chat. Language Model
+Chat calls it through Hop's native chat-provider API; it supports text prompts, system instructions,
+conversation history, model selection, timeouts and JSON-only prompting. It does not report token
+usage or finish reasons, and does not support image/tool input, structured answers, sampling
+controls, proxy settings or inline transform connection overrides. Unsupported configured options
+are reported rather than silently ignored.
 
 == Options
 

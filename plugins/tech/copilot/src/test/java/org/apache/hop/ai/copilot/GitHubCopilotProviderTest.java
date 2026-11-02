@@ -26,8 +26,13 @@ import com.github.copilot.rpc.CopilotClientMode;
 import com.github.copilot.rpc.PermissionHandler;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
+import org.apache.hop.ai.provider.AiChatCapability;
 import org.apache.hop.ai.provider.AiChatMessage;
 import org.apache.hop.ai.provider.AiChatRequest;
+import org.apache.hop.ai.provider.IAiProvider;
+import org.apache.hop.core.gui.plugin.GuiElementType;
+import org.apache.hop.core.gui.plugin.GuiWidgetElement;
 import org.junit.jupiter.api.Test;
 
 class GitHubCopilotProviderTest {
@@ -43,6 +48,18 @@ class GitHubCopilotProviderTest {
     assertEquals("C:\\Users\\me\\.copilot", options.getCopilotHome());
     assertFalse(new GitHubCopilotProvider().requiresApiKey());
     assertFalse(new GitHubCopilotProvider().supportsStructuredAnswers());
+  }
+
+  @Test
+  void declaresTheNativeChatCapabilitiesAvailableToLanguageModelChat() {
+    assertEquals(
+        Set.of(
+            AiChatCapability.MODEL_SELECTION,
+            AiChatCapability.REQUEST_TIMEOUT,
+            AiChatCapability.SYSTEM_PROMPT,
+            AiChatCapability.CONVERSATION_HISTORY,
+            AiChatCapability.JSON_ONLY_PROMPT),
+        new GitHubCopilotProvider().capabilities());
   }
 
   @Test
@@ -62,6 +79,17 @@ class GitHubCopilotProviderTest {
     assertFalse(config.getEnableOnDemandInstructionDiscovery().orElse(true));
     assertFalse(config.isEnableMcpApps());
     assertSame(PermissionHandler.APPROVE_ALL, config.getOnPermissionRequest());
+  }
+
+  @Test
+  void cliPathUsesAFilePickerOnTheConnectionTab() throws NoSuchFieldException {
+    GuiWidgetElement widget =
+        GitHubCopilotProvider.class
+            .getDeclaredField("cliPath")
+            .getAnnotation(GuiWidgetElement.class);
+
+    assertEquals(GuiElementType.FILENAME, widget.type());
+    assertEquals(IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID, widget.parentId());
   }
 
   @Test

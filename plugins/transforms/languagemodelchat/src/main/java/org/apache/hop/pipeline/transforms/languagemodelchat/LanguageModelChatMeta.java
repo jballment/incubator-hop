@@ -33,6 +33,7 @@ import static org.apache.hop.pipeline.transforms.languagemodelchat.internals.Mod
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.hop.ai.provider.AiChatProviderSession;
 import org.apache.hop.core.CheckResult;
 import org.apache.hop.core.ICheckResult;
 import org.apache.hop.core.annotations.Transform;
@@ -350,7 +351,12 @@ public class LanguageModelChatMeta
 
     if (!isEmpty(aiProviderName)) {
       try {
-        LanguageModelChatAiProviderSupport.resolve(this, variables, metadataProvider);
+        AiChatProviderSession nativeProvider =
+            LanguageModelChatAiProviderSupport.resolveNative(
+                aiProviderName, variables, metadataProvider);
+        if (nativeProvider == null) {
+          LanguageModelChatAiProviderSupport.resolve(this, variables, metadataProvider);
+        }
         cr =
             new CheckResult(
                 TYPE_RESULT_OK,

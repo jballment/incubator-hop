@@ -28,7 +28,9 @@ import com.github.copilot.rpc.SessionConfig;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +38,7 @@ import java.util.concurrent.TimeoutException;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hop.ai.AiAuthKind;
+import org.apache.hop.ai.provider.AiChatCapability;
 import org.apache.hop.ai.provider.AiChatMessage;
 import org.apache.hop.ai.provider.AiChatRequest;
 import org.apache.hop.ai.provider.AiChatResponse;
@@ -47,7 +50,6 @@ import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.gui.plugin.GuiElementType;
 import org.apache.hop.core.gui.plugin.GuiPlugin;
 import org.apache.hop.core.gui.plugin.GuiWidgetElement;
-import org.apache.hop.core.gui.plugin.GuiWidgetGroupType;
 import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
@@ -70,13 +72,10 @@ public class GitHubCopilotProvider extends BaseAiProvider implements IAiChatProv
 
   @HopMetadataProperty
   @GuiWidgetElement(
-      id = "0100-copilot-cli-path",
-      order = "0100",
-      type = GuiElementType.TEXT,
+      id = "0310-copilot-cli-path",
+      order = "0310",
+      type = GuiElementType.FILENAME,
       parentId = IAiProvider.GUI_PLUGIN_ELEMENT_PARENT_ID,
-      groupType = GuiWidgetGroupType.TABS,
-      group = "i18n::GitHubCopilotProvider.Group",
-      groupOrder = "40",
       label = "i18n::GitHubCopilotProvider.CliPath.Label",
       toolTip = "i18n::GitHubCopilotProvider.CliPath.Tooltip")
   private String cliPath = "";
@@ -118,6 +117,17 @@ public class GitHubCopilotProvider extends BaseAiProvider implements IAiChatProv
   }
 
   @Override
+  public Set<AiChatCapability> capabilities() {
+    return Set.copyOf(
+        EnumSet.of(
+            AiChatCapability.MODEL_SELECTION,
+            AiChatCapability.REQUEST_TIMEOUT,
+            AiChatCapability.SYSTEM_PROMPT,
+            AiChatCapability.CONVERSATION_HISTORY,
+            AiChatCapability.JSON_ONLY_PROMPT));
+  }
+
+  @Override
   public AiChatResponse chat(AiChatRequest request, IVariables variables) throws HopException {
     long started = System.nanoTime();
     long timeoutSeconds = timeoutSeconds(request);
@@ -134,8 +144,10 @@ public class GitHubCopilotProvider extends BaseAiProvider implements IAiChatProv
                 started,
                 timeoutSeconds,
                 "waiting for a Copilot response");
+        String content =
+            response == null || response.getData() == null ? null : response.getData().content();
         return new AiChatResponse(
-            Utils.isEmpty(response.getData().content()) ? "" : response.getData().content(),
+            Utils.isEmpty(content) ? "" : content,
             null,
             null,
             TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));

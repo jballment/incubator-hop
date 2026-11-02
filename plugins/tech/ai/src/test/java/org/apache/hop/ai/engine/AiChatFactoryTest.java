@@ -27,8 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.hop.ai.metadata.AiProvider;
+import org.apache.hop.ai.provider.AiChatCapability;
 import org.apache.hop.ai.provider.AiChatMessage;
 import org.apache.hop.ai.provider.AiChatRequest;
 import org.apache.hop.ai.provider.AiChatResponse;
@@ -94,6 +97,41 @@ class AiChatFactoryTest {
   }
 
   @Test
+  void resolvesNativeProviderSettingsAndValidatesCapabilities() throws Exception {
+    NativeChatProvider backend = new NativeChatProvider();
+    backend.setPluginId("native");
+    backend.setPluginName("Native");
+    backend.setHopModelType("NATIVE");
+    backend.setDefaultModelName("native-default");
+    backend.capabilities =
+        EnumSet.of(
+            AiChatCapability.MODEL_SELECTION,
+            AiChatCapability.REQUEST_TIMEOUT,
+            AiChatCapability.TEMPERATURE);
+    AiProvider provider = new AiProvider();
+    provider.setName("native-provider");
+    provider.setProvider(backend);
+    provider.setTemperature("0.8");
+    provider.setTimeoutSeconds("23");
+
+    var session = AiChatFactory.nativeChatProviderSession(provider, new Variables());
+
+    assertEquals("native-provider", session.providerName());
+    assertEquals("NATIVE", session.modelType());
+    assertEquals("native-default", session.modelName());
+    assertEquals(Duration.ofSeconds(23), session.timeout());
+    assertEquals(Double.valueOf(0.8), session.options().temperature());
+
+    backend.capabilities =
+        EnumSet.of(AiChatCapability.MODEL_SELECTION, AiChatCapability.REQUEST_TIMEOUT);
+    HopException error =
+        assertThrows(
+            HopException.class,
+            () -> AiChatFactory.nativeChatProviderSession(provider, new Variables()));
+    assertTrue(error.getMessage().contains("temperature"));
+  }
+
+  @Test
   void mapsOpenAiCompatibleFields() throws Exception {
     AiProvider provider = new AiProvider();
     OpenAiProvider backend = new OpenAiProvider();
@@ -117,9 +155,15 @@ class AiChatFactoryTest {
 
   private static final class NativeChatProvider extends BaseAiProvider implements IAiChatProvider {
     private AiChatRequest request;
+    private Set<AiChatCapability> capabilities = IAiChatProvider.super.capabilities();
 
     private NativeChatProvider() {
       setRequiresApiKey(false);
+    }
+
+    @Override
+    public Set<AiChatCapability> capabilities() {
+      return capabilities;
     }
 
     @Override
