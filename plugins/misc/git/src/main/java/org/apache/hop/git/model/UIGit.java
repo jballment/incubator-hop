@@ -426,6 +426,15 @@ public class UIGit extends VCS {
     return commit(authorName, message, amend);
   }
 
+  /** Whether the given path has staged, unstaged, or untracked local changes. */
+  public boolean hasLocalChanges(String path) throws HopException {
+    try {
+      return !git.status().addPath(normalizePathForJGit(path)).call().isClean();
+    } catch (Exception e) {
+      throw new HopException("Error checking status for '" + path + "'", e);
+    }
+  }
+
   /**
    * Make a single path look the way it does in a commit, in the working tree and in the index. A
    * path the commit does not have is removed here as well: not having it is what that commit did to
@@ -438,6 +447,12 @@ public class UIGit extends VCS {
   public void restorePathFromCommit(String path, String commitId) throws HopException {
     String normalizedPath = normalizePathForJGit(path);
     try {
+      if (hasLocalChanges(path)) {
+        throw new HopException(
+            "Cannot restore '"
+                + path
+                + "' because it has uncommitted changes. Commit or stash the file before continuing.");
+      }
       if (existsInCommit(normalizedPath, commitId)) {
         git.checkout().setStartPoint(commitId).addPath(normalizedPath).call();
       } else {
@@ -446,6 +461,8 @@ public class UIGit extends VCS {
         //
         git.rm().addFilepattern(normalizedPath).call();
       }
+    } catch (HopException e) {
+      throw e;
     } catch (Exception e) {
       throw new HopException("Error restoring '" + path + "' from commit '" + commitId + "'", e);
     }
@@ -810,12 +827,44 @@ public class UIGit extends VCS {
   }
 
   public boolean fetch() throws HopException {
+    return fetch(true);
+  }
+
+  /**
+   * Fetch from the remote.
+   *
+   * @param promptForCredentials whether an authentication failure may open a credentials dialog.
+   *     Pass false when not running on the UI thread, for example from the automatic fetch timer.
+   */
+  public boolean fetch(boolean promptForCredentials) throws HopException {
     if (!hasRemote()) {
       throw new HopException("There is no remote set up to fetch from. Please set this up first.");
     }
 
     try {
       git.fetch().setCredentialsProvider(credentialsProvider).setCheckFetchedObjects(true).call();
+    } catch (TransportException e) {
+      if (e.getMessage()
+              .contains(
+                  CONST_AUTHENTICATION_IS_REQUIRED_BUT_NO_CREDENTIALS_PROVIDER_HAS_BEEN_REGISTERED)
+          || e.getMessage()
+              .contains(CONST_NOT_AUTHORIZED)) { // when the cached credential does not work
+        if (!promptForCredentials) {
+          throw new HopException("There was an error doing a git fetch", e);
+        }
+        if (e.getMessage().contains(CONST_NOT_AUTHORIZED)) {
+          new ErrorDialog(
+              HopGui.getInstance().getShell(),
+              "Git Error",
+              "Error Authenticating to Git service",
+              e);
+        }
+        if (promptUsernamePassword()) {
+          return fetch(true);
+        }
+      } else {
+        throw new HopException("There was an error doing a git fetch", e);
+      }
     } catch (Exception e) {
       throw new HopException("There was an error doing a git fetch", e);
     }
@@ -1170,6 +1219,14 @@ public class UIGit extends VCS {
     }
   }
 
+  /**
+   * Open a file as it is in a commit, or in the working tree.
+   *
+   * @param file the path of the file
+   * @param commitId the commit to read the file from, or WORKINGTREE
+   * @return the content of the file, or null when the commit doesn't have the file
+   * @throws HopException when the file can't be read
+   */
   public InputStream open(String file, String commitId) throws HopException {
     String normalizedFile = normalizePathForJGit(file);
     if (commitId.equals(WORKINGTREE)) {
@@ -1187,7 +1244,9 @@ public class UIGit extends VCS {
       tw.addTree(tree);
       tw.setFilter(PathFilter.create(normalizedFile));
       tw.setRecursive(true);
-      tw.next();
+      if (!tw.next()) {
+        return null;
+      }
       ObjectLoader loader = git.getRepository().open(tw.getObjectId(0));
       return loader.openStream();
     } catch (MissingObjectException e) {

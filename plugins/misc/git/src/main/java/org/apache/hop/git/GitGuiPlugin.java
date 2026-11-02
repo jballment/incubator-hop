@@ -921,7 +921,13 @@ public class GitGuiPlugin
     if (git == null) {
       return;
     }
-    List<String> branches = git.getBranches();
+    // Only local branches other than the current one can be deleted
+    List<String> branches = git.getLocalBranches();
+    if (branches == null) {
+      return;
+    }
+    String currentBranch = git.getBranch();
+    branches = branches.stream().filter(b -> !b.equals(currentBranch)).toList();
     EnterSelectionDialog selectionDialog =
         new EnterSelectionDialog(
             HopGui.getInstance().getShell(),
@@ -930,6 +936,17 @@ public class GitGuiPlugin
             BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch.Message"));
     String branchToDelete = selectionDialog.open();
     if (branchToDelete != null) {
+      MessageBox confirmation =
+          new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+      confirmation.setText(
+          BaseMessages.getString(
+              PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchConfirmation.Header"));
+      confirmation.setMessage(
+          BaseMessages.getString(
+              PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchConfirmation.Message", branchToDelete));
+      if (confirmation.open() != SWT.YES) {
+        return;
+      }
       boolean branchDeleted = git.deleteBranch(branchToDelete, true);
       if (branchDeleted) {
         MessageBox pullSuccessful =
@@ -1504,9 +1521,13 @@ public class GitGuiPlugin
         InputStream xmlStreamNew = git.open(filename, commitIdNew)) {
 
       PipelineMeta pipelineMetaOld =
-          new PipelineMeta(xmlStreamOld, hopGui.getMetadataProvider(), hopGui.getVariables());
+          xmlStreamOld == null
+              ? new PipelineMeta()
+              : new PipelineMeta(xmlStreamOld, hopGui.getMetadataProvider(), hopGui.getVariables());
       PipelineMeta pipelineMetaNew =
-          new PipelineMeta(xmlStreamNew, hopGui.getMetadataProvider(), hopGui.getVariables());
+          xmlStreamNew == null
+              ? new PipelineMeta()
+              : new PipelineMeta(xmlStreamNew, hopGui.getMetadataProvider(), hopGui.getVariables());
 
       boolean ignorePosition = GitConfigSingleton.getConfig().isIgnoringPositionInDiff();
       Map<String, String> renamed =
@@ -1566,9 +1587,13 @@ public class GitGuiPlugin
         InputStream xmlStreamNew = git.open(filename, commitIdNew)) {
 
       WorkflowMeta workflowMetaOld =
-          new WorkflowMeta(xmlStreamOld, hopGui.getMetadataProvider(), hopGui.getVariables());
+          xmlStreamOld == null
+              ? new WorkflowMeta()
+              : new WorkflowMeta(xmlStreamOld, hopGui.getMetadataProvider(), hopGui.getVariables());
       WorkflowMeta workflowMetaNew =
-          new WorkflowMeta(xmlStreamNew, hopGui.getMetadataProvider(), hopGui.getVariables());
+          xmlStreamNew == null
+              ? new WorkflowMeta()
+              : new WorkflowMeta(xmlStreamNew, hopGui.getMetadataProvider(), hopGui.getVariables());
 
       boolean ignorePosition = GitConfigSingleton.getConfig().isIgnoringPositionInDiff();
       Map<String, String> renamed = HopDiff.detectActionRenames(workflowMetaOld, workflowMetaNew);

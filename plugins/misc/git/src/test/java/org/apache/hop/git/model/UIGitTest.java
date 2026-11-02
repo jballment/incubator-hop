@@ -572,6 +572,16 @@ public class UIGitTest extends RepositoryTestCase {
   }
 
   @Test
+  public void testOpenFileAddedByLaterCommit() throws Exception {
+    RevCommit commit = initialCommit();
+    writeTrashFile("Added.txt", "Added");
+    git.add().addFilepattern("Added.txt").call();
+    git.commit().setMessage("add a file").call();
+
+    assertNull(uiGit.open("Added.txt", commit.getName()));
+  }
+
+  @Test
   public void testCheckout() throws Exception {
     initialCommit();
 
@@ -1393,6 +1403,109 @@ public class UIGitTest extends RepositoryTestCase {
 
     assertEquals("first", read(new File(db.getWorkTree(), "Test.txt")));
     assertTrue(git.status().call().getChanged().contains("Test.txt"));
+  }
+
+  @Test
+  public void testRestorePathFromCommitPreservesUnstagedChanges() throws Exception {
+    RevCommit first = initialCommit();
+
+    writeTrashFile("Test.txt", "second");
+    git.add().addFilepattern("Test.txt").call();
+    git.commit().setMessage("second").call();
+
+    writeTrashFile("Test.txt", "MY LOCAL WORK");
+    String headBefore = git.getRepository().resolve(Constants.HEAD).name();
+
+    HopException error =
+        assertThrows(
+            HopException.class,
+            () -> uiGit.restorePathFromCommit("Test.txt", first.getId().name()));
+
+    assertTrue(error.getMessage().contains("uncommitted changes"));
+    assertEquals("MY LOCAL WORK", read(new File(db.getWorkTree(), "Test.txt")));
+    assertEquals(headBefore, git.getRepository().resolve(Constants.HEAD).name());
+    assertTrue(git.status().call().getModified().contains("Test.txt"));
+  }
+
+  @Test
+  public void testRestorePathFromCommitPreservesStagedChanges() throws Exception {
+    RevCommit first = initialCommit();
+
+    writeTrashFile("Test.txt", "second");
+    git.add().addFilepattern("Test.txt").call();
+    git.commit().setMessage("second").call();
+
+    writeTrashFile("Test.txt", "MY STAGED WORK");
+    git.add().addFilepattern("Test.txt").call();
+    String headBefore = git.getRepository().resolve(Constants.HEAD).name();
+
+    HopException error =
+        assertThrows(
+            HopException.class,
+            () -> uiGit.restorePathFromCommit("Test.txt", first.getId().name()));
+
+    assertTrue(error.getMessage().contains("uncommitted changes"));
+    assertEquals("MY STAGED WORK", read(new File(db.getWorkTree(), "Test.txt")));
+    assertEquals(headBefore, git.getRepository().resolve(Constants.HEAD).name());
+    assertTrue(git.status().call().getChanged().contains("Test.txt"));
+  }
+
+  @Test
+  public void testRestorePathFromCommitAllowsChangesToOtherPaths() throws Exception {
+    RevCommit first = initialCommit();
+
+    writeTrashFile("Test.txt", "second");
+    git.add().addFilepattern("Test.txt").call();
+    git.commit().setMessage("second").call();
+
+    writeTrashFile("Other.txt", "MY LOCAL WORK");
+    uiGit.restorePathFromCommit("Test.txt", first.getId().name());
+
+    assertEquals("Hello world", read(new File(db.getWorkTree(), "Test.txt")));
+    assertEquals("MY LOCAL WORK", read(new File(db.getWorkTree(), "Other.txt")));
+    assertTrue(git.status().call().getUntracked().contains("Other.txt"));
+  }
+
+  @Test
+  public void testRestorePathFromCommitPreservesChangesWhenRemovingAddedPath() throws Exception {
+    RevCommit first = initialCommit();
+
+    writeTrashFile("Added.txt", "added later");
+    git.add().addFilepattern("Added.txt").call();
+    git.commit().setMessage("add a file").call();
+
+    writeTrashFile("Added.txt", "MY LOCAL WORK");
+    String headBefore = git.getRepository().resolve(Constants.HEAD).name();
+    HopException error =
+        assertThrows(
+            HopException.class,
+            () -> uiGit.restorePathFromCommit("Added.txt", first.getId().name()));
+
+    assertTrue(error.getMessage().contains("uncommitted changes"));
+    assertEquals("MY LOCAL WORK", read(new File(db.getWorkTree(), "Added.txt")));
+    assertEquals(headBefore, git.getRepository().resolve(Constants.HEAD).name());
+    assertTrue(git.status().call().getModified().contains("Added.txt"));
+  }
+
+  @Test
+  public void testRestorePathFromCommitPreservesUntrackedFileWhenRestoringDeletedPath()
+      throws Exception {
+    RevCommit first = initialCommit();
+
+    git.rm().addFilepattern("Test.txt").call();
+    git.commit().setMessage("delete the file").call();
+    writeTrashFile("Test.txt", "MY LOCAL WORK");
+    String headBefore = git.getRepository().resolve(Constants.HEAD).name();
+
+    HopException error =
+        assertThrows(
+            HopException.class,
+            () -> uiGit.restorePathFromCommit("Test.txt", first.getId().name()));
+
+    assertTrue(error.getMessage().contains("uncommitted changes"));
+    assertEquals("MY LOCAL WORK", read(new File(db.getWorkTree(), "Test.txt")));
+    assertEquals(headBefore, git.getRepository().resolve(Constants.HEAD).name());
+    assertTrue(git.status().call().getUntracked().contains("Test.txt"));
   }
 
   /**
